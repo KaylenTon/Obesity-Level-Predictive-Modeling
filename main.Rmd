@@ -1,0 +1,40 @@
+---
+title: "Obesity Level Predictive Modeling"
+author: "Kaylen Ton"
+---
+
+### Load in the data
+
+```{r - packages and data}
+
+library(tidyverse)
+library(tidymodels)
+
+mydata <- read_csv("ObesityData.csv")
+
+```
+
+### Cleaning the data
+* Rounding different variables by different decimal places
+* Remove un-interpretable variable: HVAC (?)
+
+```{r}
+
+cleaned_data <- mydata %>% 
+  mutate(across(where(is.numeric), ~ round(.x, 2))) %>% 
+  mutate(Age = round(Age, 0))
+
+```
+
+### EDA
+For the purpose of variable selection. Correlation matrices (via a heat map maybe?)
+
+# **Modeling**
+
+## Preprocessing
+
+## Feature Engineering
+
+## Fitting Models
+
+## Comparing Models
