@@ -56,9 +56,9 @@ obesity_train %>%
 ```{r}
 
 tree_model <- decision_tree(
-  cost_complexity = tune(),
-  tree_depth = tune(),
-  min_n = tune()
+  # cost_complexity = tune(),
+  # tree_depth = tune(),
+  # min_n = tune()
   ) %>% 
   set_engine('rpart') %>% 
   set_mode('classification')
@@ -70,7 +70,6 @@ tree_model <- decision_tree(
 ```{r}
 
 tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>% 
-  step_normalize(all_numeric()) %>% 
   step_dummy(all_nominal(), -all_outcomes())
 
 ```
@@ -94,7 +93,7 @@ tree_workflow <- workflow() %>%
     # Fit resamples
     tree_fit_resample <- tree_workflow %>% 
       fit_resamples(resamples = tree_folds,
-                    metrics = tree_metrics)
+                    metrics = tree_metrics) # ERROR 2
     
     tree_fit_rs_result <- tree_fit_resample %>% 
       collect_metrics(summarize = F)
@@ -110,7 +109,6 @@ tree_workflow <- workflow() %>%
     tree_grid <- grid_random(parameters(tree_model),
                              size = 10) # ERROR
     
-    
 
 # Training workflow
 tree_workflow_fit <- tree_workflow %>% 
@@ -118,7 +116,6 @@ tree_workflow_fit <- tree_workflow %>%
 
 tree_workflow_fit %>% 
   collect_metrics()
-
 
 ```
 
