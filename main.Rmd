@@ -51,74 +51,6 @@ obesity_train %>%
 
 ```
 
-## Specify Model
-
-```{r}
-
-tree_model <- decision_tree(
-  # cost_complexity = tune(),
-  # tree_depth = tune(),
-  # min_n = tune()
-  ) %>% 
-  set_engine('rpart') %>% 
-  set_mode('classification')
-
-```
-
-## Feature Engineering
-
-```{r}
-
-tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>% 
-  step_dummy(all_nominal(), -all_outcomes())
-
-```
-
-## Fitting Models
-
-```{r}
-
-# Create workflow - combines my model specification and recipe to train a parsnip model and recipe object at the same time.
-tree_workflow <- workflow() %>% 
-  add_model(tree_model) %>% 
-  add_recipe(tree_recipe)
-
-# Cross Validation and Hyper-parameter Tuning
-    tree_folds <- vfold_cv(obesity_train, v = 10,
-                           strata = NObeyesdad)
-    
-    # Configure custom metrics
-    tree_metrics <- metric_set(roc_auc, sens, spec)
-    
-    # Fit resamples
-    tree_fit_resample <- tree_workflow %>% 
-      fit_resamples(resamples = tree_folds,
-                    metrics = tree_metrics) # ERROR 2
-    
-    tree_fit_rs_result <- tree_fit_resample %>% 
-      collect_metrics(summarize = F)
-    
-    tree_fit_rs_result %>%
-      group_by(.metric) %>%
-      summarize(min = min(.estimate),
-      median = median(.estimate),
-      max = max(.estimate))
-    
-    tree_workflow
-    
-    tree_grid <- grid_random(parameters(tree_model),
-                             size = 10) # ERROR
-    
-
-# Training workflow
-tree_workflow_fit <- tree_workflow %>% 
-  last_fit(split = split)
-
-tree_workflow_fit %>% 
-  collect_metrics()
-
-```
-
 # Model 1 - Base Decision Tree
 ```{r}
 
@@ -126,12 +58,13 @@ base_tree_model <- decision_tree() %>%
   set_engine('rpart') %>% 
   set_mode('classification')
 
-base_tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>%
+tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>%
+  step_novel(all_nominal_predictors(), -all_outcomes(), new_level = "new") %>% 
   step_dummy(all_nominal(), -all_outcomes())
 
 tree_workflow <- workflow() %>% 
   add_model(base_tree_model) %>% 
-  add_recipe(base_tree_recipe)
+  add_recipe(tree_recipe)
 
 base_tree_fit <- tree_workflow %>% 
   last_fit(split = split)
@@ -167,7 +100,7 @@ tree_metrics <- metric_set(roc_auc, sens, spec)
 # Fit resamples
 tree_fit_resample <- tree_workflow %>% 
   fit_resamples(resamples = tree_folds, 
-                metrics = tree_metrics) # ERROR 2
+                metrics = tree_metrics)
     
 tree_fit_rs_result <- tree_fit_resample %>% 
   collect_metrics(summarize = F)
@@ -179,20 +112,48 @@ tree_fit_rs_result %>%
             max = max(.estimate))
 
 # 10 fold estimates
-# roc_auc	  0.9579323	  0.9759741	  0.9840533	
-# sens	    0.8130370	  0.8709799 	0.9244589	
-# spec	    0.9694077	  0.9791484	  0.9881155
+#           min         median      max
+# roc_auc	  0.9537121	  0.9755792	  0.9849096	
+# sens	    0.7960134	  0.8624006 	0.9229712	
+# spec	    0.9660406	  0.9780128	  0.9875136
 
-tree_grid <- grid_random(parameters(tune_tree_model), size = 10) # ERROR 1
+tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 5)
 
 tree_workflow <- tree_workflow %>%
   update_model(tune_tree_model)
 
-tune_tree_fit <- tree_workflow %>% 
-  last_fit(split = split) 
-    
-tune_tree_fit %>% 
+tuning_tree_results <- tree_workflow %>% 
+  tune_grid(resamples = tree_folds,
+            grid = tree_grid,
+            metrics = tree_metrics)
+
+tuning_tree_results %>% 
+  collect_metrics(summarize = FALSE) %>% 
+  filter(.metric == "roc_auc") %>% 
+  group_by(id) %>% 
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+tuning_tree_results %>% 
+  show_best(metric = 'roc_auc', n = 5)
+
+best_tune_tree_model <- tuning_tree_results %>% 
+  select_best(metric = 'roc_auc')
+
+final_tune_tree_workflow <- tree_workflow %>% 
+  finalize_workflow(best_tune_tree_model)
+
+final_tune_tree_fit <- final_tune_tree_workflow %>% 
+  last_fit(split = split)
+
+final_tune_tree_fit %>% 
   collect_metrics()
+
+# Tuned decision tree model results
+  # accuracy	    multiclass	  0.89622642	
+  # roc_auc	      hand_till	    0.97529694	
+  # brier_class	  multiclass	  0.08308033	
 
 ```
 
