@@ -73,9 +73,9 @@ base_tree_fit %>%
   collect_metrics()
 
 # Base decision tree model results
-  # accuracy	    multiclass	  0.8433962		
-  # roc_auc	      hand_till 	  0.9654471		
-  # brier_class	  multiclass	  0.1244353	
+  # accuracy	    multiclass	  0.8811321		
+  # roc_auc	      hand_till 	  0.9696520		
+  # brier_class	  multiclass	  0.1004273	
 
 ```
 
@@ -112,10 +112,10 @@ tree_fit_rs_result %>%
             max = max(.estimate))
 
 # 10 fold estimates
-#           min         median      max
-# roc_auc	  0.9537121	  0.9755792	  0.9849096	
-# sens	    0.7960134	  0.8624006 	0.9229712	
-# spec	    0.9660406	  0.9780128	  0.9875136
+#   .metric     min   median      max
+# 1 roc_auc   0.966   0.972     0.982
+# 2 sens      0.842   0.871     0.912
+# 3 spec      0.974   0.979     0.986
 
 tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 5)
 
@@ -151,9 +151,9 @@ final_tune_tree_fit %>%
   collect_metrics()
 
 # Tuned decision tree model results
-  # accuracy	    multiclass	  0.89622642	
-  # roc_auc	      hand_till	    0.97529694	
-  # brier_class	  multiclass	  0.08308033	
+  # accuracy	    multiclass	  0.90377358	
+  # roc_auc	      hand_till	    0.97649882	
+  # brier_class	  multiclass	  0.07820231	
 
 ```
 
