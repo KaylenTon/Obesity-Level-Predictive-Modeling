@@ -26,6 +26,20 @@ cleaned_data <- mydata %>%
 
 ```
 
+# **Modeling**
+
+## Preprocessing
+
+```{r}
+
+set.seed(73)
+split <- initial_split(cleaned_data, strata = NObeyesdad)
+
+obesity_train <- training(split)
+obesity_test <- testing(split)
+
+```
+
 ### EDA
 ```{r}
 
@@ -37,29 +51,15 @@ obesity_train %>%
 
 ```
 
-
-# **Modeling**
-
-## Preprocessing
-
-```{r}
-
-set.seed(73)
-split <- initial_split(cleaned_data)
-
-obesity_train <- training(split)
-obesity_test <- testing(split)
-
-```
-
 ## Specify Model
 
 ```{r}
 
 tree_model <- decision_tree(
-  cost_complexity = tune(), 
-  tree_depth = tune(), 
-  min_n = tune()) %>% 
+  cost_complexity = tune(),
+  tree_depth = tune(),
+  min_n = tune()
+  ) %>% 
   set_engine('rpart') %>% 
   set_mode('classification')
 
@@ -76,5 +76,50 @@ tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>%
 ```
 
 ## Fitting Models
+
+```{r}
+
+# Create workflow - combines my model specification and recipe to train a parsnip model and recipe object at the same time.
+tree_workflow <- workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(tree_recipe)
+
+# Cross Validation and Hyper-parameter Tuning
+    tree_folds <- vfold_cv(obesity_train, v = 10,
+                           strata = NObeyesdad)
+    
+    # Configure custom metrics
+    tree_metrics <- metric_set(roc_auc, sens, spec)
+    
+    # Fit resamples
+    tree_fit_resample <- tree_workflow %>% 
+      fit_resamples(resamples = tree_folds,
+                    metrics = tree_metrics)
+    
+    tree_fit_rs_result <- tree_fit_resample %>% 
+      collect_metrics(summarize = F)
+    
+    tree_fit_rs_result %>%
+      group_by(.metric) %>%
+      summarize(min = min(.estimate),
+      median = median(.estimate),
+      max = max(.estimate))
+    
+    tree_workflow
+    
+    tree_grid <- grid_random(parameters(tree_model),
+                             size = 10) # ERROR
+    
+    
+
+# Training workflow
+tree_workflow_fit <- tree_workflow %>% 
+  last_fit(split = split)
+
+tree_workflow_fit %>% 
+  collect_metrics()
+
+
+```
 
 ## Comparing Models
