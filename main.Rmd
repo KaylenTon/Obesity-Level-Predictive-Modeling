@@ -27,13 +27,53 @@ cleaned_data <- mydata %>%
 ```
 
 ### EDA
-For the purpose of variable selection. Correlation matrices (via a heat map maybe?)
+```{r}
+
+obesity_train %>% 
+  select_if(is.numeric) %>% 
+  cor()
+
+# The highest correlations between variables stays under |.32|
+
+```
+
 
 # **Modeling**
 
 ## Preprocessing
 
+```{r}
+
+set.seed(73)
+split <- initial_split(cleaned_data)
+
+obesity_train <- training(split)
+obesity_test <- testing(split)
+
+```
+
+## Specify Model
+
+```{r}
+
+tree_model <- decision_tree(
+  cost_complexity = tune(), 
+  tree_depth = tune(), 
+  min_n = tune()) %>% 
+  set_engine('rpart') %>% 
+  set_mode('classification')
+
+```
+
 ## Feature Engineering
+
+```{r}
+
+tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>% 
+  step_normalize(all_numeric()) %>% 
+  step_dummy(all_nominal(), -all_outcomes())
+
+```
 
 ## Fitting Models
 
