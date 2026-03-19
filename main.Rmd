@@ -26,28 +26,30 @@ cleaned_data <- mydata %>%
 
 ```
 
+### EDA
+```{r}
+
+cleaned_data %>% 
+  select_if(is.numeric) %>% 
+  cor()
+
+# The highest correlations between variables stays under |.50|
+# Weight & Height -> 0.46226361 correlation
+
+```
+
 # **Modeling**
 
-## Preprocessing
+## Splitting Data
 
 ```{r}
 
 set.seed(73)
+
 split <- initial_split(cleaned_data, strata = NObeyesdad)
 
 obesity_train <- training(split)
 obesity_test <- testing(split)
-
-```
-
-### EDA
-```{r}
-
-obesity_train %>% 
-  select_if(is.numeric) %>% 
-  cor()
-
-# The highest correlations between variables stays under |.32|
 
 ```
 
@@ -113,9 +115,9 @@ tree_fit_rs_result %>%
 
 # 10 fold estimates
 #   .metric     min   median      max
-# 1 roc_auc   0.966   0.972     0.982
-# 2 sens      0.842   0.871     0.912
-# 3 spec      0.974   0.979     0.986
+# 1 roc_auc   0.958   0.976     0.984
+# 2 sens      0.813   0.871     0.924
+# 3 spec      0.969   0.979     0.988
 
 tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 5)
 
@@ -150,10 +152,10 @@ final_tune_tree_fit <- final_tune_tree_workflow %>%
 final_tune_tree_fit %>% 
   collect_metrics()
 
-# Tuned decision tree model results
-  # accuracy	    multiclass	  0.90377358	
-  # roc_auc	      hand_till	    0.97649882	
-  # brier_class	  multiclass	  0.07820231	
+# Tuned decision  tree model     results
+  # accuracy	    multiclass	  0.90000000	
+  # roc_auc	      hand_till	    0.98130472	
+  # brier_class	  multiclass	  0.08573253	
 
 ```
 
