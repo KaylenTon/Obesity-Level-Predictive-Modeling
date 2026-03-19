@@ -9,14 +9,16 @@ author: "Kaylen Ton"
 
 library(tidyverse)
 library(tidymodels)
+library(vip)
 
 mydata <- read_csv("ObesityData.csv")
 
 ```
 
 ### Cleaning the data
-* Rounding different variables by different decimal places
-* Remove un-interpretable variable: HVAC (?)
+
+- Rounding different variables by different decimal places
+- Remove un-interpretable variable: HVAC (?)
 
 ```{r}
 
@@ -27,6 +29,7 @@ cleaned_data <- mydata %>%
 ```
 
 ### EDA
+
 ```{r}
 
 cleaned_data %>% 
@@ -54,6 +57,7 @@ obesity_test <- testing(split)
 ```
 
 # Model 1 - Base Decision Tree
+
 ```{r}
 
 base_tree_model <- decision_tree() %>% 
@@ -75,13 +79,14 @@ base_tree_fit %>%
   collect_metrics()
 
 # Base decision tree model results
-  # accuracy	    multiclass	  0.8811321		
-  # roc_auc	      hand_till 	  0.9696520		
-  # brier_class	  multiclass	  0.1004273	
+  # accuracy	    multiclass	  0.8433962		
+  # roc_auc	      hand_till 	  0.9654471		
+  # brier_class	  multiclass	  0.1244353	
 
 ```
 
 # Model 2 - Tree Model w/ Tuned Hyper-Parameters
+
 ```{r}
 
 tune_tree_model <- decision_tree(
@@ -159,3 +164,10 @@ final_tune_tree_fit %>%
 
 ```
 
+# Model 3 - Boosted ?
+
+```{r}
+
+
+
+```
