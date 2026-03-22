@@ -65,8 +65,8 @@ base_tree_model <- decision_tree() %>%
   set_mode('classification')
 
 tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>%
-  step_novel(all_nominal_predictors(), -all_outcomes(), new_level = "new") %>% 
-  step_dummy(all_nominal(), -all_outcomes())
+  step_novel(all_nominal_predictors(), new_level = "other") %>% 
+  step_dummy(all_nominal_predictors())
 
 tree_workflow <- workflow() %>% 
   add_model(base_tree_model) %>% 
@@ -141,6 +141,8 @@ tuning_tree_results %>%
   summarize(min_roc_auc = min(.estimate),
             median_roc_auc = median(.estimate),
             max_roc_auc = max(.estimate))
+
+autoplot(tuning_tree_results)
 
 tuning_tree_results %>% 
   show_best(metric = 'roc_auc', n = 5)
