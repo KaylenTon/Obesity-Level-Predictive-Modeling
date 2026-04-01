@@ -11,7 +11,11 @@ library(tidyverse)
 library(tidymodels)
 library(vip)
 
-mydata <- read_csv("ObesityData.csv")
+# For parallel processing when it comes to tuning multiple models (which can take longer)
+library(parallelly)
+library(future)
+cores <- availableCores(logical = F)
+plan(multisession, workers = cores)
 
 ```
 
@@ -21,6 +25,8 @@ mydata <- read_csv("ObesityData.csv")
 - Remove un-interpretable variable: HVAC (?)
 
 ```{r}
+
+mydata <- read_csv("ObesityData.csv")
 
 cleaned_data <- mydata %>% 
   mutate(across(where(is.numeric), ~ round(.x, 2))) %>% 
