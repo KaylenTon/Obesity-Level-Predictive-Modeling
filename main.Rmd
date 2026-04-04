@@ -175,7 +175,7 @@ final_tune_tree_fit <- final_tune_tree_workflow %>%
 final_tune_tree_fit %>% 
   collect_metrics()
 
-# Tuned decision  tree model     results
+# Tuned Decision Tree Model Results
   # accuracy	    multiclass	  0.90000000	
   # roc_auc	      hand_till	    0.98133305	
   # brier_class	  multiclass	  0.08617526	
@@ -231,6 +231,56 @@ tune_gradient_boost_tree_model <- boost_tree(
   set_mode("classification") %>% 
   set_engine("xgboost")
 
-tree_grid <- grid_random(extract_parameter_set_dials(tune_gradient_boost_tree_model), size = 30)
+gradient_tree_grid <- grid_random(extract_parameter_set_dials(tune_gradient_boost_tree_model), size = 30)
+
+# lines 141-165 pasted
+
+tree_workflow <- tree_workflow %>%
+  update_model(tune_gradient_boost_tree_model)
+
+tuning_gradient_tree_results <- tree_workflow %>% 
+  tune_grid(resamples = tree_folds,
+            grid = gradient_tree_grid,
+            metrics = tree_metrics)
+
+tuning_gradient_tree_results %>% 
+  collect_metrics(summarize = FALSE) %>% 
+  filter(.metric == "roc_auc") %>% 
+  group_by(id) %>% 
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+autoplot(tuning_gradient_tree_results)
+
+tuning_gradient_tree_results %>% 
+  collect_metrics(summarize = FALSE) %>% 
+  filter(.metric == "roc_auc") %>% 
+  group_by(id) %>% 
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+autoplot(tuning_gradient_tree_results)
+
+tuning_gradient_tree_results %>% 
+  show_best(metric = 'roc_auc', n = 5)
+
+best_tune_tree_model <- tuning_gradient_tree_results %>% 
+  select_best(metric = 'roc_auc')
+
+final_tune_tree_workflow <- tree_workflow %>% 
+  finalize_workflow(best_tune_tree_model)
+
+final_tune_tree_fit <- final_tune_tree_workflow %>% 
+  last_fit(split = split)
+
+final_tune_tree_fit %>% 
+  collect_metrics()
+
+# Tuned Gradient Boost Model Results
+  # accuracy	    multiclass	  0.9698113	
+  # roc_auc	      hand_till	    0.9989288	
+  # brier_class	  multiclass	  0.0234654
 
 ```
