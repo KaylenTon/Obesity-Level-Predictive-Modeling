@@ -121,8 +121,8 @@ tree_folds <- vfold_cv(obesity_train, v = 10,
 tree_metrics <- metric_set(roc_auc, sens, spec)
     
 # Fit resamples
-tree_fit_resample <- tree_workflow %>% 
-  fit_resamples(resamples = tree_folds, 
+tree_fit_resample <- tree_workflow %>%
+  fit_resamples(resamples = tree_folds,
                 metrics = tree_metrics)
     
 tree_fit_rs_result <- tree_fit_resample %>% 
@@ -140,7 +140,7 @@ tree_fit_rs_result %>%
 # 2 sens      0.813   0.871     0.924
 # 3 spec      0.969   0.979     0.988
 
-tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 5)
+tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 20)
 
 tree_workflow <- tree_workflow %>%
   update_model(tune_tree_model)
@@ -177,8 +177,8 @@ final_tune_tree_fit %>%
 
 # Tuned decision  tree model     results
   # accuracy	    multiclass	  0.90000000	
-  # roc_auc	      hand_till	    0.98130472	
-  # brier_class	  multiclass	  0.08573253	
+  # roc_auc	      hand_till	    0.98133305	
+  # brier_class	  multiclass	  0.08617526	
 
 ```
 
@@ -222,6 +222,7 @@ ggplot(roc_curve_3, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
   theme_light() +
   labs(title = "ROC Curve 3: Gradient Boosted Tree Model")
 
+# Tuning
 tune_gradient_boost_tree_model <- boost_tree(
   trees = tune(),
   learn_rate = tune(),
@@ -229,5 +230,7 @@ tune_gradient_boost_tree_model <- boost_tree(
   sample_size = tune()) %>% 
   set_mode("classification") %>% 
   set_engine("xgboost")
+
+tree_grid <- grid_random(extract_parameter_set_dials(tune_gradient_boost_tree_model), size = 30)
 
 ```
