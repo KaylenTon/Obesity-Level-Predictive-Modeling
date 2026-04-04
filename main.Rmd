@@ -200,7 +200,6 @@ predictions <- decision_tree() %>%
  predict(new_data = obesity_train, type = "prob") %>%
  bind_cols(obesity_train)
 
-
 # Calculate AUC
 roc_auc(predictions,
         truth = NObeyesdad,
@@ -232,8 +231,6 @@ tune_gradient_boost_tree_model <- boost_tree(
   set_engine("xgboost")
 
 gradient_tree_grid <- grid_random(extract_parameter_set_dials(tune_gradient_boost_tree_model), size = 30)
-
-# lines 141-165 pasted
 
 tree_workflow <- tree_workflow %>%
   update_model(tune_gradient_boost_tree_model)
