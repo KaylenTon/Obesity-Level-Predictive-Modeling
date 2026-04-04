@@ -29,8 +29,11 @@ plan(multisession, workers = cores)
 mydata <- read_csv("ObesityData.csv")
 
 cleaned_data <- mydata %>% 
-  mutate(across(where(is.numeric), ~ round(.x, 2))) %>% 
-  mutate(Age = round(Age, 0))
+  mutate(
+    across(where(is.numeric), ~ round(.x, 2)),
+    across(where(is.character), as.factor),
+    Age = round(Age, 0)
+  )
 
 ```
 
@@ -53,6 +56,7 @@ cleaned_data %>%
 
 ```{r}
 
+# Set seed for reproducibility 
 set.seed(73)
 
 split <- initial_split(cleaned_data, strata = NObeyesdad)
@@ -66,21 +70,26 @@ obesity_test <- testing(split)
 
 ```{r}
 
+# Specify Model
 base_tree_model <- decision_tree() %>% 
   set_engine('rpart') %>% 
   set_mode('classification')
 
+# Create Recipe
 tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>%
   step_novel(all_nominal_predictors(), new_level = "other") %>% 
   step_dummy(all_nominal_predictors())
 
+# Create Workflow
 tree_workflow <- workflow() %>% 
   add_model(base_tree_model) %>% 
   add_recipe(tree_recipe)
 
+# Fit & Test
 base_tree_fit <- tree_workflow %>% 
   last_fit(split = split)
-    
+
+# Collect Metrics    
 base_tree_fit %>% 
   collect_metrics()
 
@@ -91,10 +100,11 @@ base_tree_fit %>%
 
 ```
 
-# Model 2 - Tree Model w/ Tuned Hyper-Parameters
+# Model 2 - Base Decision Tree Model w/ Tuned Hyper-Parameters
 
 ```{r}
 
+# Specify Model
 tune_tree_model <- decision_tree(
   cost_complexity = tune(),
   tree_depth = tune(),
@@ -172,10 +182,52 @@ final_tune_tree_fit %>%
 
 ```
 
-# Model 3 - Boosted ?
+# Model 3 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters
 
 ```{r}
 
+# Specify Model
 
+gradient_boost_tree_model <- boost_tree() %>% 
+  set_mode("classification") %>% 
+  set_engine("xgboost")
+
+# Train
+predictions <- decision_tree() %>%
+ set_mode("classification") %>%
+ set_engine("rpart") %>%
+ fit(NObeyesdad ~ ., data = obesity_train) %>%
+ predict(new_data = obesity_train, type = "prob") %>%
+ bind_cols(obesity_train)
+
+
+# Calculate AUC
+roc_auc(predictions,
+        truth = NObeyesdad,
+        .pred_Insufficient_Weight:.pred_Overweight_Level_II,
+        estimator = "macro")
+
+# .metric     .estimator    .estimate
+# roc_auc	    macro	        0.9781517	
+
+roc_curve_3 <- roc_curve(predictions,
+        truth = NObeyesdad,
+        .pred_Insufficient_Weight:.pred_Overweight_Level_II,
+        estimator = "macro")
+
+ggplot(roc_curve_3, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
+  geom_line(size = 1, alpha = .5) +
+  labs(color = "Obesity Level") +
+  geom_abline(lty = 2, alpha = .5) +
+  theme_light() +
+  labs(title = "ROC Curve 3: Gradient Boosted Tree Model")
+
+tune_gradient_boost_tree_model <- boost_tree(
+  trees = tune(),
+  learn_rate = tune(),
+  tree_depth = tune(),
+  sample_size = tune()) %>% 
+  set_mode("classification") %>% 
+  set_engine("xgboost")
 
 ```
