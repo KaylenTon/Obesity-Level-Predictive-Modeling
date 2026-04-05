@@ -90,6 +90,26 @@ tree_workflow <- workflow() %>%
   add_model(base_tree_model) %>% 
   add_recipe(tree_recipe)
 
+# Fit resamples (CV)
+tree_fit_resample <- tree_workflow %>%
+  fit_resamples(resamples = tree_folds,
+                metrics = tree_metrics)
+    
+tree_fit_rs_result <- tree_fit_resample %>% 
+  collect_metrics(summarize = F)
+
+tree_fit_rs_result %>%
+  group_by(.metric) %>%
+  summarize(min = min(.estimate),
+            median = median(.estimate),
+            max = max(.estimate))
+
+# 10 fold estimates (CV results)
+#   .metric       min           median        max
+# 1 roc_auc	    0.9629274	    0.9750240	    0.9852812	
+# 2 sens	      0.8455354	    0.8670822	    0.8976190	
+# 3 spec	      0.9748247	    0.9786377	    0.9840322	
+
 # Fit & Test
 base_tree_fit <- tree_workflow %>% 
   last_fit(split = split)
@@ -117,32 +137,15 @@ tune_tree_model <- decision_tree(
   ) %>% 
   set_engine('rpart') %>% 
   set_mode('classification')
-    
-# Fit resamples (CV)
-tree_fit_resample <- tree_workflow %>%
-  fit_resamples(resamples = tree_folds,
-                metrics = tree_metrics)
-    
-tree_fit_rs_result <- tree_fit_resample %>% 
-  collect_metrics(summarize = F)
 
-tree_fit_rs_result %>%
-  group_by(.metric) %>%
-  summarize(min = min(.estimate),
-            median = median(.estimate),
-            max = max(.estimate))
-
-# 10 fold estimates (CV results)
-#   .metric       min           median        max
-# 1 roc_auc	    0.9629274	    0.9750240	    0.9852812	
-# 2 sens	      0.8455354	    0.8670822	    0.8976190	
-# 3 spec	      0.9748247	    0.9786377	    0.9840322	
-
+# Create tuning grid for hyper-parameters
 tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 20)
 
+# Update workflow object with new model: tune_tree_model
 tree_workflow <- tree_workflow %>%
   update_model(tune_tree_model)
 
+# Tuning and resampling (cv)
 tuning_tree_results <- tree_workflow %>% 
   tune_grid(resamples = tree_folds,
             grid = tree_grid,
@@ -160,6 +163,10 @@ autoplot(tuning_tree_results)
 
 tuning_tree_results %>% 
   show_best(metric = 'roc_auc', n = 5)
+
+# Top 1 :
+# cost_complexity     tree_depth  min_n   .metric   .estimator    mean          n    std_err
+# 5.840945e-09        8           33      roc_auc   hand_till     0.9795647     10   0.001921038
 
 best_tune_tree_model <- tuning_tree_results %>% 
   select_best(metric = 'roc_auc')
@@ -192,6 +199,14 @@ gradient_boost_tree_model <- boost_tree() %>%
 # Last fit - train and test
 boosted_fit <- gradient_boost_tree_model %>%
  last_fit(NObeyesdad ~ ., split = split)
+
+boosted_fit %>% 
+  collect_metrics()
+
+# Base gradient boosted tree model results
+  # accuracy	    multiclass	  0.96603774
+  # roc_auc	      hand_till	    0.99809339
+  # brier_class	  multiclass	  0.03259311
 
 # Collect predictions
 boosted_predictions <- boosted_fit %>% 
