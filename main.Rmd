@@ -197,7 +197,7 @@ final_tune_tree_fit %>%
 
 ```
 
-# Model 3 - Gradient Boosted Tree Model
+# Model 3.1 - Gradient Boosted Tree Model
 
 ```{r}
 
@@ -239,7 +239,7 @@ ggplot(boosted_roc, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
 
 ```
 
-# Model 4 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters
+# Model 3.2 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters
 
 ```{r}
 
