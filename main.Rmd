@@ -67,7 +67,7 @@ tree_folds <- vfold_cv(obesity_train, v = 10,
                        strata = NObeyesdad)
     
 # Creating custom metrics
-tree_metrics <- metric_set(roc_auc, sens, spec)
+tree_metrics <- metric_set(accuracy, roc_auc, sens, spec)
 
 ```
 
@@ -99,29 +99,38 @@ tree_fit_rs_result <- tree_fit_resample %>%
   collect_metrics(summarize = F)
 
 tree_fit_rs_result %>%
+  filter(.metric == 'roc_auc') %>% 
+  group_by(id) %>%
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+tree_fit_rs_result %>%
   group_by(.metric) %>%
   summarize(min = min(.estimate),
             median = median(.estimate),
             max = max(.estimate))
 
 # 10 fold estimates (CV results)
-#   .metric       min           median        max
-# 1 roc_auc	    0.9629274	    0.9750240	    0.9852812	
-# 2 sens	      0.8455354	    0.8670822	    0.8976190	
-# 3 spec	      0.9748247	    0.9786377	    0.9840322	
+#   .metric       min         median        max
+# accuracy	  0.8490566	    0.8713926	    0.9032258
+# roc_auc	    0.9629274	    0.9750240	    0.9852812	
+# sens	      0.8455354	    0.8670822	    0.8976190	
+# spec	      0.9748247	    0.9786377	    0.9840322	
 
 # Fit & Test
 base_tree_fit <- tree_workflow %>% 
-  last_fit(split = split)
+  last_fit(split = split, metrics = tree_metrics)
 
 # Collect Metrics    
 base_tree_fit %>% 
   collect_metrics()
 
 # Base decision tree model results
-  # accuracy	    multiclass	  0.8433962		
+  # accuracy	    multiclass	  0.8433962	
+  # sens	        macro	        0.8396276
+  # spec	        macro	        0.9739000
   # roc_auc	      hand_till 	  0.9654471		
-  # brier_class	  multiclass	  0.1244353	
 
 ```
 
@@ -175,15 +184,16 @@ final_tune_tree_workflow <- tree_workflow %>%
   finalize_workflow(best_tune_tree_model)
 
 final_tune_tree_fit <- final_tune_tree_workflow %>% 
-  last_fit(split = split)
+  last_fit(split = split, metrics = tree_metrics)
 
 final_tune_tree_fit %>% 
   collect_metrics()
 
 # Tuned Decision Tree Model Results
-  # accuracy	    multiclass	  0.89622642	
-  # roc_auc	      hand_till	    0.98111992	
-  # brier_class	  multiclass	  0.08672105	
+# accuracy multiclass     0.8962264 
+# sens     macro          0.8940891 
+# spec     macro          0.9826643 
+# roc_auc  hand_till      0.9811199 
 
 ```
 
@@ -198,15 +208,16 @@ gradient_boost_tree_model <- boost_tree() %>%
 
 # Last fit - train and test
 boosted_fit <- gradient_boost_tree_model %>%
- last_fit(NObeyesdad ~ ., split = split)
+ last_fit(NObeyesdad ~ ., split = split, metrics = tree_metrics)
 
 boosted_fit %>% 
   collect_metrics()
 
 # Base gradient boosted tree model results
-  # accuracy	    multiclass	  0.96603774
-  # roc_auc	      hand_till	    0.99809339
-  # brier_class	  multiclass	  0.03259311
+  # accuracy multiclass     0.9660377 
+  # sens     macro          0.9656546 
+  # spec     macro          0.9943455 
+  # roc_auc  hand_till      0.9980934 
 
 # Collect predictions
 boosted_predictions <- boosted_fit %>% 
@@ -242,11 +253,14 @@ tune_gradient_boost_tree_model <- boost_tree(
   set_mode("classification") %>% 
   set_engine("xgboost")
 
+# Create tuning grid for hyper-parameters
 gradient_tree_grid <- grid_random(extract_parameter_set_dials(tune_gradient_boost_tree_model), size = 30)
 
+# Update workflow object with new model: tune_gradient_boost_tree_model
 tree_workflow <- tree_workflow %>%
   update_model(tune_gradient_boost_tree_model)
 
+# Tuning and resampling (cv)
 tuning_gradient_tree_results <- tree_workflow %>% 
   tune_grid(resamples = tree_folds,
             grid = gradient_tree_grid,
@@ -265,6 +279,10 @@ autoplot(tuning_gradient_tree_results)
 tuning_gradient_tree_results %>% 
   show_best(metric = 'roc_auc', n = 5)
 
+# Top 1 :
+# trees   tree_depth  learn_rate  sample_size   .metric   .estimator    mean     n
+# 1558            10      0.0175        0.835   roc_auc   hand_till     0.998    10
+
 best_tune_tree_model <- tuning_gradient_tree_results %>% 
   select_best(metric = 'roc_auc')
 
@@ -272,14 +290,15 @@ final_tune_tree_workflow <- tree_workflow %>%
   finalize_workflow(best_tune_tree_model)
 
 final_tune_tree_fit <- final_tune_tree_workflow %>% 
-  last_fit(split = split)
+  last_fit(split = split, metrics = tree_metrics)
 
 final_tune_tree_fit %>% 
   collect_metrics()
 
 # Tuned Gradient Boost Model Results
-  # accuracy	    multiclass	  0.96981132
-  # roc_auc	      hand_till	    0.99883843
-  # brier_class	  multiclass	  0.02134977
+  # accuracy	    multiclass	  0.8962264
+  # sens	        macro	        0.8940891
+  # spec	        macro	        0.9826643
+  # roc_auc	      hand_till	    0.9811199
 
 ```
