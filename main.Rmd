@@ -59,16 +59,17 @@ cleaned_data %>%
 # Set seed for reproducibility 
 set.seed(73)
 
+# Split data
 split <- initial_split(cleaned_data, strata = NObeyesdad)
 
 obesity_train <- training(split)
 obesity_test <- testing(split)
 
-# Cross Validation for Resampling
+# Preparing folds for cross validation and resampling
 tree_folds <- vfold_cv(obesity_train, v = 10,
                        strata = NObeyesdad)
     
-# Custom metrics
+# Creating custom metrics
 tree_metrics <- metric_set(roc_auc, sens, spec)
 
 ```
@@ -120,7 +121,7 @@ tune_tree_model <- decision_tree(
   set_engine('rpart') %>% 
   set_mode('classification')
     
-# Fit resamples
+# Fit resamples (CV)
 tree_fit_resample <- tree_workflow %>%
   fit_resamples(resamples = tree_folds,
                 metrics = tree_metrics)
@@ -134,11 +135,11 @@ tree_fit_rs_result %>%
             median = median(.estimate),
             max = max(.estimate))
 
-# 10 fold estimates
-#   .metric     min   median      max
-# 1 roc_auc   0.958   0.976     0.984
-# 2 sens      0.813   0.871     0.924
-# 3 spec      0.969   0.979     0.988
+# 10 fold estimates (CV results)
+#   .metric       min           median        max
+# 1 roc_auc	    0.9629274	    0.9750240	    0.9852812	
+# 2 sens	      0.8455354	    0.8670822	    0.8976190	
+# 3 spec	      0.9748247	    0.9786377	    0.9840322	
 
 tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 20)
 
@@ -176,9 +177,9 @@ final_tune_tree_fit %>%
   collect_metrics()
 
 # Tuned Decision Tree Model Results
-  # accuracy	    multiclass	  0.90000000	
-  # roc_auc	      hand_till	    0.98133305	
-  # brier_class	  multiclass	  0.08617526	
+  # accuracy	    multiclass	  0.89622642	
+  # roc_auc	      hand_till	    0.98111992	
+  # brier_class	  multiclass	  0.08672105	
 
 ```
 
@@ -251,16 +252,6 @@ tuning_gradient_tree_results %>%
 autoplot(tuning_gradient_tree_results)
 
 tuning_gradient_tree_results %>% 
-  collect_metrics(summarize = FALSE) %>% 
-  filter(.metric == "roc_auc") %>% 
-  group_by(id) %>% 
-  summarize(min_roc_auc = min(.estimate),
-            median_roc_auc = median(.estimate),
-            max_roc_auc = max(.estimate))
-
-autoplot(tuning_gradient_tree_results)
-
-tuning_gradient_tree_results %>% 
   show_best(metric = 'roc_auc', n = 5)
 
 best_tune_tree_model <- tuning_gradient_tree_results %>% 
@@ -276,8 +267,8 @@ final_tune_tree_fit %>%
   collect_metrics()
 
 # Tuned Gradient Boost Model Results
-  # accuracy	    multiclass	  0.9698113	
-  # roc_auc	      hand_till	    0.9989288	
-  # brier_class	  multiclass	  0.0234654
+  # accuracy	    multiclass	  0.96981132
+  # roc_auc	      hand_till	    0.99883843
+  # brier_class	  multiclass	  0.02134977
 
 ```
