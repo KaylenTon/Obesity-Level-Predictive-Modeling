@@ -189,35 +189,20 @@ gradient_boost_tree_model <- boost_tree() %>%
   set_mode("classification") %>% 
   set_engine("xgboost")
 
-# Train
+# Last fit - train and test
 boosted_fit <- gradient_boost_tree_model %>%
-  fit(NObeyesdad ~ ., data = obesity_train)
+ last_fit(NObeyesdad ~ ., split = split)
 
-# Test + Predict
-class_preds <- predict(boosted_fit, new_data = obesity_test, type = "class")
-prob_preds <- predict(boosted_fit, new_data = obesity_test, type = "prob")
+# Collect predictions
+boosted_predictions <- boosted_fit %>% 
+  collect_predictions()
 
-prediction_results <- obesity_test %>%
-  select(NObeyesdad) %>%
-  bind_cols(class_preds, prob_preds)
-
-# Calculate AUC
-roc_auc(prediction_results,
-        truth = NObeyesdad,
-        starts_with(".pred_"),
-        - .pred_class,
+# Visualize ROC curve
+boosted_roc <- boosted_predictions %>% 
+  roc_curve(truth = NObeyesdad, .pred_Insufficient_Weight:.pred_Overweight_Level_II,
         estimator = "macro")
 
-# .metric     .estimator    .estimate
-# roc_auc	    macro	        0.998096	
-
-# Visualizing roc curve
-roc_curve_3 <- roc_curve(prediction_results,
-        truth = NObeyesdad,
-        .pred_Insufficient_Weight:.pred_Overweight_Level_II,
-        estimator = "macro")
-
-ggplot(roc_curve_3, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
+ggplot(boosted_roc, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
   geom_line(linewidth = .75, alpha = .75) +
   labs(color = "Obesity Level") +
   geom_abline(lty = 2, alpha = .5) +
