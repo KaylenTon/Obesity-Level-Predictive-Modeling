@@ -3,7 +3,7 @@ title: "Obesity Level Predictive Modeling"
 author: "Kaylen Ton"
 ---
 
-### Load in the data
+### Load packages
 
 ```{r - packages and data}
 
@@ -19,10 +19,7 @@ plan(multisession, workers = cores)
 
 ```
 
-### Cleaning the data
-
-- Rounding different variables by different decimal places
-- Remove un-interpretable variable: HVAC (?)
+### Load in and clean data
 
 ```{r}
 
@@ -183,51 +180,63 @@ final_tune_tree_fit %>%
 
 ```
 
-# Model 3 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters
+# Model 3 - Gradient Boosted Tree Model
 
 ```{r}
 
 # Specify Model
-
 gradient_boost_tree_model <- boost_tree() %>% 
   set_mode("classification") %>% 
   set_engine("xgboost")
 
 # Train
-predictions <- decision_tree() %>%
- set_mode("classification") %>%
- set_engine("rpart") %>%
- fit(NObeyesdad ~ ., data = obesity_train) %>%
- predict(new_data = obesity_train, type = "prob") %>%
- bind_cols(obesity_train)
+boosted_fit <- gradient_boost_tree_model %>%
+  fit(NObeyesdad ~ ., data = obesity_train)
+
+# Test + Predict
+class_preds <- predict(boosted_fit, new_data = obesity_test, type = "class")
+prob_preds <- predict(boosted_fit, new_data = obesity_test, type = "prob")
+
+prediction_results <- obesity_test %>%
+  select(NObeyesdad) %>%
+  bind_cols(class_preds, prob_preds)
 
 # Calculate AUC
-roc_auc(predictions,
+roc_auc(prediction_results,
         truth = NObeyesdad,
-        .pred_Insufficient_Weight:.pred_Overweight_Level_II,
+        starts_with(".pred_"),
+        - .pred_class,
         estimator = "macro")
 
 # .metric     .estimator    .estimate
-# roc_auc	    macro	        0.9781517	
+# roc_auc	    macro	        0.998096	
 
-roc_curve_3 <- roc_curve(predictions,
+# Visualizing roc curve
+roc_curve_3 <- roc_curve(prediction_results,
         truth = NObeyesdad,
         .pred_Insufficient_Weight:.pred_Overweight_Level_II,
         estimator = "macro")
 
 ggplot(roc_curve_3, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
-  geom_line(size = 1, alpha = .5) +
+  geom_line(linewidth = .75, alpha = .75) +
   labs(color = "Obesity Level") +
   geom_abline(lty = 2, alpha = .5) +
   theme_light() +
   labs(title = "ROC Curve 3: Gradient Boosted Tree Model")
 
-# Tuning
+```
+
+# Model 4 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters
+
+```{r}
+
+# Gradient Boosted Tree w/ Tuning
 tune_gradient_boost_tree_model <- boost_tree(
-  trees = tune(),
-  learn_rate = tune(),
-  tree_depth = tune(),
-  sample_size = tune()) %>% 
+    trees = tune(),
+    learn_rate = tune(),
+    tree_depth = tune(),
+    sample_size = tune()
+  ) %>% 
   set_mode("classification") %>% 
   set_engine("xgboost")
 
