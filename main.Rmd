@@ -197,6 +197,8 @@ boosted_fit <- gradient_boost_tree_model %>%
 boosted_predictions <- boosted_fit %>% 
   collect_predictions()
 
+boosted_predictions
+
 # Visualize ROC curve
 boosted_roc <- boosted_predictions %>% 
   roc_curve(truth = NObeyesdad, .pred_Insufficient_Weight:.pred_Overweight_Level_II,
