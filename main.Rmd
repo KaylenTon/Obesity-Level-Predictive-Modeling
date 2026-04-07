@@ -296,9 +296,9 @@ final_tune_tree_fit %>%
   collect_metrics()
 
 # Tuned Gradient Boost Model Results
-  # accuracy	    multiclass	  0.8962264
-  # sens	        macro	        0.8940891
-  # spec	        macro	        0.9826643
-  # roc_auc	      hand_till	    0.9811199
+  # accuracy	    multiclass	  0.9698113
+  # sens	        macro	        0.9694619
+  # spec	        macro	        0.9949892
+  # roc_auc	      hand_till	    0.9991636
 
 ```
