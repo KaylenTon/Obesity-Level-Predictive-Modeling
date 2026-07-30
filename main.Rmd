@@ -1,6 +1,10 @@
 ---
 title: "Obesity Level Predictive Modeling"
-author: "Kaylen Ton"
+author: "Zachary Cannon, Makayla Harvey, Giancarlo Pantano, Kaylen Ton, Megan Xiao"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
 ---
 
 ### Load packages
@@ -10,6 +14,7 @@ author: "Kaylen Ton"
 library(tidyverse)
 library(tidymodels)
 library(vip)
+library(ggplot2)
 
 # For parallel processing when it comes to tuning multiple models (which can take longer)
 library(parallelly)
@@ -19,32 +24,131 @@ plan(multisession, workers = cores)
 
 ```
 
-### Load in and clean data
+### Load in and separate normal and synthetic data
 
 ```{r}
 
-mydata <- read_csv("ObesityData.csv")
+# Load raw data 
 
-cleaned_data <- mydata %>% 
-  mutate(
-    across(where(is.numeric), ~ round(.x, 2)),
-    across(where(is.character), as.factor),
-    Age = round(Age, 0)
-  )
+raw_data <- read.csv("original_obesity_dataset.csv", 
+                     stringsAsFactors = FALSE)
 
+cat("Number of rows:", nrow(raw_data),"\n",
+    "Number of columns:", ncol(raw_data), "\n\n")
+str(raw_data)
+head(raw_data)
+
+# Save a copy of raw_data with the duplicates for now
+df <- raw_data
+
+#Create DF with only real data
+problem_cols <- c("Age","FCVC","NCP","CH2O","FAF","TUE")
+
+is_decimal <- function(x){
+  !is.na(x) & (x %% 1 != 0)
+}
+
+is_not_decimal <- function(x){
+  !is.na(x) & (x %% 1 == 0)
+}
+
+#if at least one record in problem_cols is a decimal value, save in syn_df
+syn_df <- df %>%
+  filter(if_any(all_of(problem_cols), is_decimal))
+nrow(syn_df)
+
+#if all records in problem_cols are whole numbers, save in normal_df
+normal_df <- df %>%
+  filter(if_all(all_of(problem_cols), is_not_decimal))
+nrow(normal_df)
+
+#ensure rows add to 2111
+nrow(syn_df) + nrow(normal_df)
 ```
 
-### EDA
+### EDA: Comparing NObeyesdad between Synthetic data, Real data, and All data
 
 ```{r}
+#histogram of normal_df NObeyesdad
+norm_df_count <- normal_df %>%
+  count(NObeyesdad) %>%
+  arrange(desc(n))
 
-cleaned_data %>% 
-  select_if(is.numeric) %>% 
-  cor()
+p <- ggplot(norm_df_count, aes(x= NObeyesdad, y = n, fill = NObeyesdad)) +
+  geom_col() +
+  labs(title = "Counts of Obesity Levels (Normal/Real Data only)",
+       x = "Obesity Level",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+p
+#most are of "Normal Weight"
 
-# The highest correlations between variables stays under |.50|
-# Weight & Height -> 0.46226361 correlation
+syn_df_count <- syn_df %>%
+  count(NObeyesdad) %>%
+  arrange(desc(n))
 
+p2 <- ggplot(syn_df_count, aes(x=NObeyesdad, y = n, fill = NObeyesdad)) +
+  geom_col() +
+  labs(title = "Counts of Obesity Levels (Synthetic Data only)",
+       x = "Obesity Level",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+p2
+#classes are balanced, but no "Normal Weight"
+
+df_count <- df %>%
+  count(NObeyesdad) %>%
+  arrange(desc(n))
+
+p3 <- ggplot(df_count, aes(x=NObeyesdad, y=n, fill=NObeyesdad))+
+  geom_col() +
+  labs(title = "Counts of Obesity Levels (All Rows - Normal/Read + Synthetic)",
+       x = "Obesity Level",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+p3
+#"Normal Weight" is as balanced as the other classes when we consider all NObeyesdad values
+```
+
+## Cleaning Data: Rounding
+```{r}
+#Because syn_df does not contain "Normal Weight", we will not use it for model training. We will instead compare model training results with normal_df (contains only real data) and df (contains BOTH real and synthetic data)
+
+# Rounding Logic for both normal_df and df:
+str(df)
+#   Age     0 decimals, age in years, whole number only
+#   Height  2 decimals height in meters, 2 decimal points for cm precision
+#   Weight  1 decimal weight in kg, 1 decimal point is sufficient
+#   FCVC    0 decimals scale 1-3, whole number only (categorical) - recoded to 0/1/2 for consistency
+#   NCP     0 decimals number of meals, whole number only
+#   CH2O    0 decimal water intake scale 1-3, whole number only (in liters) - recoded to 0/1/2 for consistency
+#   FAF     0 decimal physical activity scale 0-3 (in days)
+#   TUE     0 decimals tech use scale 0-2, whole number only
+
+#Rounding code:
+round_df <- function(df){
+  df$Age    <- round(df$Age,    0)
+  df$Height <- round(df$Height, 2)
+  df$Weight <- round(df$Weight, 1)
+  df$FCVC   <- as.numeric(round(df$FCVC, 0))
+  #Recode FCVC to 0/1/2
+  df$FCVC <- df$FCVC - 1
+  df$NCP    <- as.numeric(round(df$NCP,  0))
+  df$CH2O   <- round(df$CH2O, 0)
+  #Recode CH2O to 0/1/2
+  df$CH2O <- df$CH2O - 1
+  df$FAF    <- round(df$FAF,  0)
+  df$TUE    <- as.numeric(round(df$TUE,  0))
+  
+  return(df)
+}
+
+normal_df <- round_df(normal_df)
+df <- round_df(df)
+
+#Convert NObeyesdad to factors
+normal_df$NObeyesdad <- as.factor(normal_df$NObeyesdad)
+df$NObeyesdad <- as.factor(df$NObeyesdad)
 ```
 
 # **Modeling**
@@ -57,23 +161,32 @@ cleaned_data %>%
 set.seed(73)
 
 # Split data
-split <- initial_split(cleaned_data, strata = NObeyesdad)
+normal_df_split <- initial_split(normal_df, strata = NObeyesdad)
+syn_df_split <- initial_split(df, strata = NObeyesdad)
 
-obesity_train <- training(split)
-obesity_test <- testing(split)
+normal_obesity_train <- training(normal_df_split)
+normal_obesity_test <- testing(normal_df_split)
+
+syn_obesity_train <- training(syn_df_split)
+syn_obesity_test <- testing(syn_df_split)
 
 # Preparing folds for cross validation and resampling
-tree_folds <- vfold_cv(obesity_train, v = 10,
+normal_tree_folds <- vfold_cv(normal_obesity_train, v = 10,
                        strata = NObeyesdad)
+syn_tree_folds <- vfold_cv(syn_obesity_train, v = 10,
+                           strata = NObeyesdad)
     
 # Creating custom metrics
 tree_metrics <- metric_set(accuracy, roc_auc, sens, spec)
 
 ```
 
-# Model 1 - Base Decision Tree
+
+# Model 1 - Base Decision Tree: Real Data (normal_df)
 
 ```{r}
+
+### REAL DATA (normal_df) ###
 
 # Specify Model
 base_tree_model <- decision_tree() %>% 
@@ -81,7 +194,7 @@ base_tree_model <- decision_tree() %>%
   set_mode('classification')
 
 # Create Recipe
-tree_recipe <- recipe(NObeyesdad ~ ., data = obesity_train) %>%
+tree_recipe <- recipe(NObeyesdad ~ ., data = normal_obesity_train) %>%
   step_novel(all_nominal_predictors(), new_level = "other") %>% 
   step_dummy(all_nominal_predictors())
 
@@ -92,7 +205,7 @@ tree_workflow <- workflow() %>%
 
 # Fit resamples (CV)
 tree_fit_resample <- tree_workflow %>%
-  fit_resamples(resamples = tree_folds,
+  fit_resamples(resamples = normal_tree_folds,
                 metrics = tree_metrics)
     
 tree_fit_rs_result <- tree_fit_resample %>% 
@@ -113,28 +226,103 @@ tree_fit_rs_result %>%
 
 # 10 fold estimates (CV results)
 #   .metric       min         median        max
-# accuracy	  0.8490566	    0.8713926	    0.9032258
-# roc_auc	    0.9629274	    0.9750240	    0.9852812	
-# sens	      0.8455354	    0.8670822	    0.8976190	
-# spec	      0.9748247	    0.9786377	    0.9840322	
+#   accuracy	  0.6052632	  0.7434211	  0.8000000	
+#   roc_auc	    0.7821145	  0.8875162	  0.9562112	
+#   sens	      0.4085859	  0.5702521	  0.7759420	
+#   spec	      0.9119484	  0.9459625	  0.9598066
+
+# obtain mean roc_auc score
+tree_fit_rs_result %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(.estimate))
+
+# .metric     .mean
+#   roc_auc	0.8848726
 
 # Fit & Test
 base_tree_fit <- tree_workflow %>% 
-  last_fit(split = split, metrics = tree_metrics)
+  last_fit(split = normal_df_split, metrics = tree_metrics)
 
 # Collect Metrics    
 base_tree_fit %>% 
   collect_metrics()
 
 # Base decision tree model results
-  # accuracy	    multiclass	  0.8433962	
-  # sens	        macro	        0.8396276
-  # spec	        macro	        0.9739000
-  # roc_auc	      hand_till 	  0.9654471		
+# accuracy	multiclass	0.7984496
+# sens	    macro	      0.6822979	
+# spec	    macro	      0.9561176	
+# roc_auc	  hand_till	  0.9388945	
+```
+
+# Model 1 - Base Decision Tree: Synthetic data (df)
+
+```{r}
+
+tree_recipe <- recipe(NObeyesdad ~ ., data = syn_obesity_train) %>%
+  step_novel(all_nominal_predictors(), new_level = "other") %>% 
+  step_dummy(all_nominal_predictors())
+
+# Create Workflow
+tree_workflow <- workflow() %>% 
+  add_model(base_tree_model) %>% 
+  add_recipe(tree_recipe)
+
+# Fit resamples (CV)
+tree_fit_resample <- tree_workflow %>%
+  fit_resamples(resamples = syn_tree_folds,
+                metrics = tree_metrics)
+    
+tree_fit_rs_result <- tree_fit_resample %>% 
+  collect_metrics(summarize = F)
+
+tree_fit_rs_result %>%
+  filter(.metric == 'roc_auc') %>% 
+  group_by(id) %>%
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+tree_fit_rs_result %>%
+  group_by(.metric) %>%
+  summarize(min = min(.estimate),
+            median = median(.estimate),
+            max = max(.estimate))
+
+# 10 fold estimates (CV results)
+#   .metric       min         median        max
+#   accuracy	  0.8456790	  0.8846106	  0.9096774	
+#   roc_auc	    0.9655698	  0.9761792	  0.9860841	
+#   sens	      0.8438571	  0.8783675	  0.9086866	
+#   spec	      0.9742624	  0.9808544	  0.9850412	
+
+# obtain mean roc_auc score
+tree_fit_rs_result %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(.estimate))
+
+# .metric     .mean
+#   roc_auc	  0.97596	
+
+# Fit & Test
+base_tree_fit <- tree_workflow %>% 
+  last_fit(split = syn_df_split, metrics = tree_metrics)
+
+# Collect Metrics    
+base_tree_fit %>% 
+  collect_metrics()
+
+# Base decision tree model results
+# accuracy	multiclass	0.8849057	
+# sens	    macro	      0.8809348	
+# spec	    macro	      0.9808438		
+# roc_auc	  hand_till	  0.9776858	
 
 ```
 
-# Model 2 - Base Decision Tree Model w/ Tuned Hyper-Parameters
+
+# Model 2 - Base Decision Tree Model w/ Tuned Hyper-Parameters: Real Data (normal_df)
 
 ```{r}
 
@@ -156,7 +344,7 @@ tree_workflow <- tree_workflow %>%
 
 # Tuning and resampling (cv)
 tuning_tree_results <- tree_workflow %>% 
-  tune_grid(resamples = tree_folds,
+  tune_grid(resamples = normal_tree_folds,
             grid = tree_grid,
             metrics = tree_metrics)
 
@@ -173,9 +361,21 @@ autoplot(tuning_tree_results)
 tuning_tree_results %>% 
   show_best(metric = 'roc_auc', n = 5)
 
-# Top 1 :
-# cost_complexity     tree_depth  min_n   .metric   .estimator    mean          n    std_err
-# 5.840945e-09        8           33      roc_auc   hand_till     0.9795647     10   0.001921038
+# Top 5:
+# cost_complexity     tree_depth    min_n   .metric   .estimator    mean          n     std_err
+# 3.243197e-04	      15	          20	    roc_auc	  hand_till	    0.9016376	    10	  0.01725857
+# 1.258728e-04	      9	            21	    roc_auc	  hand_till	    0.8996373	    10	  0.01683664
+# 1.102454e-02	      11	          14	    roc_auc	  hand_till	    0.8945377	    10	  0.02182977
+# 8.593975e-09	      7	            18	    roc_auc	  hand_till	    0.8898451	    10	  0.02039882
+# 2.018634e-04	      7	            18	    roc_auc	  hand_till	    0.8898451	    10	  0.02039882	
+
+# obtain mean roc_auc score
+tuning_tree_results %>%
+  show_best(metric = "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(mean))
+# .metric   .mean
+# roc_auc  0.8951006		
 
 best_tune_tree_model <- tuning_tree_results %>% 
   select_best(metric = 'roc_auc')
@@ -184,20 +384,95 @@ final_tune_tree_workflow <- tree_workflow %>%
   finalize_workflow(best_tune_tree_model)
 
 final_tune_tree_fit <- final_tune_tree_workflow %>% 
-  last_fit(split = split, metrics = tree_metrics)
+  last_fit(split = normal_df_split, metrics = tree_metrics)
 
 final_tune_tree_fit %>% 
   collect_metrics()
 
 # Tuned Decision Tree Model Results
-# accuracy multiclass     0.8962264 
-# sens     macro          0.8940891 
-# spec     macro          0.9826643 
-# roc_auc  hand_till      0.9811199 
+# accuracy multiclass     0.7984496 
+# sens     macro          0.7379486 
+# spec     macro          0.9602287
+# roc_auc  hand_till      0.9381596 
+
+```
+# Model 2 - Base Decision Tree Model w/ Tuned Hyper-Parameters: Synthetic Data (df)
+
+```{r}
+
+# Specify Model
+tune_tree_model <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune(),
+  min_n = tune()
+  ) %>% 
+  set_engine('rpart') %>% 
+  set_mode('classification')
+
+# Create tuning grid for hyper-parameters
+tree_grid <- grid_random(extract_parameter_set_dials(tune_tree_model), size = 20)
+
+# Update workflow object with new model: tune_tree_model
+tree_workflow <- tree_workflow %>%
+  update_model(tune_tree_model)
+
+# Tuning and resampling (cv)
+tuning_tree_results <- tree_workflow %>% 
+  tune_grid(resamples = syn_tree_folds,
+            grid = tree_grid,
+            metrics = tree_metrics)
+
+tuning_tree_results %>% 
+  collect_metrics(summarize = FALSE) %>% 
+  filter(.metric == "roc_auc") %>% 
+  group_by(id) %>% 
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+autoplot(tuning_tree_results)
+
+tuning_tree_results %>% 
+  show_best(metric = 'roc_auc', n = 5)
+
+# Top 5:
+# cost_complexity     tree_depth    min_n   .metric   .estimator    mean          n     std_err
+# 1.360564e-05	      14	          22	    roc_auc	  hand_till	    0.9825882	    10	  0.002290333	
+# 2.537619e-10	      10	          15	    roc_auc	  hand_till	    0.9823914	    10	  0.002352027	
+# 2.994957e-06	      9	            35	    roc_auc	  hand_till	    0.9819036	    10	  0.001896366	
+# 9.723147e-10	      8	            37	    roc_auc	  hand_till	    0.9818976	    10	  0.001896149
+# 5.640532e-08	      7	            39	    roc_auc	  hand_till	    0.9803524	    10	  0.001934734
+
+# obtain mean roc_auc score
+tuning_tree_results %>%
+  show_best(metric = "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(mean))
+
+# .metric   .mean
+# roc_auc  0.9818266	
+
+best_tune_tree_model <- tuning_tree_results %>% 
+  select_best(metric = 'roc_auc')
+
+final_tune_tree_workflow <- tree_workflow %>% 
+  finalize_workflow(best_tune_tree_model)
+
+final_tune_tree_fit <- final_tune_tree_workflow %>% 
+  last_fit(split = syn_df_split, metrics = tree_metrics)
+
+final_tune_tree_fit %>% 
+  collect_metrics()
+
+# Tuned Decision Tree Model Results
+# accuracy multiclass     0.9433962 
+# sens     macro          0.9424962 
+# spec     macro          0.9905704
+# roc_auc  hand_till      0.9888267 
 
 ```
 
-# Model 3.1 - Gradient Boosted Tree Model
+# Model 3.1 - Gradient Boosted Tree Model: Real Data (normal_df)
 
 ```{r}
 
@@ -206,24 +481,89 @@ gradient_boost_tree_model <- boost_tree() %>%
   set_mode("classification") %>% 
   set_engine("xgboost")
 
+# Create Recipe
+boost_recipe <- recipe(NObeyesdad ~ ., data = normal_obesity_train) %>%
+  step_novel(all_nominal_predictors(), new_level = "other") %>% 
+  step_dummy(all_nominal_predictors())
+
+# Create Workflow
+boost_workflow <- workflow() %>% 
+  add_recipe(boost_recipe) %>% 
+  add_model(gradient_boost_tree_model)
+
 # Last fit - train and test
-boosted_fit <- gradient_boost_tree_model %>%
- last_fit(NObeyesdad ~ ., split = split, metrics = tree_metrics)
+boosted_fit <- boost_workflow %>%
+ last_fit(NObeyesdad ~ ., split = normal_df_split, metrics = tree_metrics)
 
 boosted_fit %>% 
   collect_metrics()
 
 # Base gradient boosted tree model results
-  # accuracy multiclass     0.9660377 
-  # sens     macro          0.9656546 
-  # spec     macro          0.9943455 
-  # roc_auc  hand_till      0.9980934 
+  # accuracy multiclass     0.8372093 
+  # sens     macro          0.6813674 
+  # spec     macro          0.9597362
+  # roc_auc  hand_till      0.9397156 
 
 # Collect predictions
 boosted_predictions <- boosted_fit %>% 
   collect_predictions()
 
 boosted_predictions
+
+boosted_predictions <- boosted_predictions %>%
+  mutate(NObeyesdad = fct_drop(NObeyesdad))
+
+# Visualize ROC curve
+boosted_roc <- boosted_predictions %>% 
+  roc_curve(truth = NObeyesdad, .pred_Insufficient_Weight:.pred_Overweight_Level_II,
+            -.pred_Obesity_Type_III, #drop obesity type III since none exist in the test set
+        estimator = "macro")
+
+ggplot(boosted_roc, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
+  geom_line(linewidth = .75, alpha = .75) +
+  labs(color = "Obesity Level") +
+  geom_abline(lty = 2, alpha = .5) +
+  theme_light() +
+  labs(title = "ROC Curve 3: Gradient Boosted Tree Model (Real Data)")
+
+```
+# Model 3.1 - Gradient Boosted Tree Model: Synthetic Data (df)
+
+```{r}
+# Specify Model
+gradient_boost_tree_model <- boost_tree() %>% 
+  set_mode("classification") %>% 
+  set_engine("xgboost")
+
+# Create Recipe
+boost_recipe <- recipe(NObeyesdad ~ ., data = syn_obesity_train) %>%
+  step_novel(all_nominal_predictors(), new_level = "other") %>% 
+  step_dummy(all_nominal_predictors())
+
+# Create Workflow
+boost_workflow <- workflow() %>% 
+  add_recipe(boost_recipe) %>% 
+  add_model(gradient_boost_tree_model)
+
+# Last fit - train and test
+boosted_fit <- boost_workflow %>%
+ last_fit(NObeyesdad ~ ., split = syn_df_split, metrics = tree_metrics)
+
+boosted_fit %>% 
+  collect_metrics()
+
+# Base gradient boosted tree model results
+  # accuracy multiclass     0.9716981 
+  # sens     macro          0.9702199 
+  # spec     macro          0.9952840
+  # roc_auc  hand_till      0.9977706 
+
+# Collect predictions
+boosted_predictions <- boosted_fit %>% 
+  collect_predictions()
+
+boosted_predictions
+
 
 # Visualize ROC curve
 boosted_roc <- boosted_predictions %>% 
@@ -235,11 +575,11 @@ ggplot(boosted_roc, aes(x = 1 - specificity, y = sensitivity, color = .level)) +
   labs(color = "Obesity Level") +
   geom_abline(lty = 2, alpha = .5) +
   theme_light() +
-  labs(title = "ROC Curve 3: Gradient Boosted Tree Model")
-
+  labs(title = "ROC Curve 3: Gradient Boosted Tree Model (Synthetic Data)")
 ```
 
-# Model 3.2 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters
+
+# Model 3.2 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters: Real Data (normal_df)
 
 ```{r}
 
@@ -262,7 +602,7 @@ tree_workflow <- tree_workflow %>%
 
 # Tuning and resampling (cv)
 tuning_gradient_tree_results <- tree_workflow %>% 
-  tune_grid(resamples = tree_folds,
+  tune_grid(resamples = normal_tree_folds,
             grid = gradient_tree_grid,
             metrics = tree_metrics)
 
@@ -279,9 +619,22 @@ autoplot(tuning_gradient_tree_results)
 tuning_gradient_tree_results %>% 
   show_best(metric = 'roc_auc', n = 5)
 
-# Top 1 :
-# trees   tree_depth  learn_rate  sample_size   .metric   .estimator    mean     n
-# 1558            10      0.0175        0.835   roc_auc   hand_till     0.998    10
+# Top 5:
+# trees   tree_depth  learn_rate  sample_size   .metric   .estimator    mean        n     std_err
+# 1871	  11	        0.013749865	0.7860675	    roc_auc	  hand_till	    0.9269546	  10	  0.009176586
+# 898	    12	        0.003692208	0.8881136	    roc_auc	  hand_till	    0.9268193	  10	  0.011009459
+# 457	    3	          0.028356323	0.7688713	    roc_auc	  hand_till	    0.9243418	  10	  0.009407939
+# 1537	  14	        0.001700274	0.8570314	    roc_auc	  hand_till	    0.9230048	  10	  0.011836180	
+# 936	    10	        0.002553602	0.7410630	    roc_auc	  hand_till	    0.9217199	  10	  0.012767880
+
+# obtain mean roc_auc score
+tuning_gradient_tree_results %>%
+  show_best(metric = "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(mean))
+
+# .metric   mean
+# roc_auc	0.9296265		
 
 best_tune_tree_model <- tuning_gradient_tree_results %>% 
   select_best(metric = 'roc_auc')
@@ -290,15 +643,252 @@ final_tune_tree_workflow <- tree_workflow %>%
   finalize_workflow(best_tune_tree_model)
 
 final_tune_tree_fit <- final_tune_tree_workflow %>% 
-  last_fit(split = split, metrics = tree_metrics)
+  last_fit(split = normal_df_split, metrics = tree_metrics)
 
 final_tune_tree_fit %>% 
   collect_metrics()
 
 # Tuned Gradient Boost Model Results
-  # accuracy	    multiclass	  0.9698113
-  # sens	        macro	        0.9694619
-  # spec	        macro	        0.9949892
-  # roc_auc	      hand_till	    0.9991636
+  # accuracy	    multiclass	  0.8372093
+  # sens	        macro	        0.6825161
+  # spec	        macro	        0.9610802
+  # roc_auc	      hand_till	    0.9523730
 
+```
+
+# Model 3.2 - Gradient Boosted Tree Model w/ Tuned Hyper-Parameters: Synthetic Data (df)
+```{r}
+# Gradient Boosted Tree w/ Tuning
+tune_gradient_boost_tree_model <- boost_tree(
+    trees = tune(),
+    learn_rate = tune(),
+    tree_depth = tune(),
+    sample_size = tune()
+  ) %>% 
+  set_mode("classification") %>% 
+  set_engine("xgboost")
+
+# Create tuning grid for hyper-parameters
+gradient_tree_grid <- grid_random(extract_parameter_set_dials(tune_gradient_boost_tree_model), size = 30)
+
+# Update workflow object with new model: tune_gradient_boost_tree_model
+tree_workflow <- tree_workflow %>%
+  update_model(tune_gradient_boost_tree_model)
+
+# Tuning and resampling (cv)
+tuning_gradient_tree_results <- tree_workflow %>% 
+  tune_grid(resamples = syn_tree_folds,
+            grid = gradient_tree_grid,
+            metrics = tree_metrics)
+
+tuning_gradient_tree_results %>% 
+  collect_metrics(summarize = FALSE) %>% 
+  filter(.metric == "roc_auc") %>% 
+  group_by(id) %>% 
+  summarize(min_roc_auc = min(.estimate),
+            median_roc_auc = median(.estimate),
+            max_roc_auc = max(.estimate))
+
+autoplot(tuning_gradient_tree_results)
+
+tuning_gradient_tree_results %>% 
+  show_best(metric = 'roc_auc', n = 5)
+
+# Top 5:
+# trees   tree_depth  learn_rate  sample_size   .metric   .estimator    mean        n     std_err
+# 1041	  6	          0.02855801	0.6350682	    roc_auc	  hand_till	    0.9988747	  10	  0.0002577269
+# 1003	  6	          0.05915703	0.7647551	    roc_auc	  hand_till	    0.9988500	  10	  0.0002855007
+# 655	    8	          0.25178004	0.9765933	    roc_auc	  hand_till	    0.9988047	  10	  0.0003078358
+# 879	    15	        0.04603143	0.5071435	    roc_auc	  hand_till	    0.9987901	  10	  0.0002968329
+# 752	    11	        0.03238721	0.8381573	    roc_auc	  hand_till	    0.9987422	  10	  0.0002720549
+
+# obtain mean roc_auc score
+tuning_gradient_tree_results %>%
+  show_best(metric = "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(mean))
+
+# .metric   mean
+# roc_auc	0.9988123			
+
+best_tune_tree_model <- tuning_gradient_tree_results %>% 
+  select_best(metric = 'roc_auc')
+
+final_tune_tree_workflow <- tree_workflow %>% 
+  finalize_workflow(best_tune_tree_model)
+
+final_tune_tree_fit <- final_tune_tree_workflow %>% 
+  last_fit(split = syn_df_split, metrics = tree_metrics)
+
+final_tune_tree_fit %>% 
+  collect_metrics()
+
+# Tuned Gradient Boost Model Results
+  # accuracy	    multiclass	  0.9716981
+  # sens	        macro	        0.9704182
+  # spec	        macro	        0.9952833
+  # roc_auc	      hand_till	    0.9989265
+```
+
+
+# Model 4 - KNN: Real Data (normal_df)
+
+```{r}
+
+#Create Recipe
+knn_recipe <- recipe(NObeyesdad ~ ., data = normal_obesity_train) %>%
+  step_novel(all_nominal_predictors(), new_level = "other") %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_predictors()) %>%
+  step_normalize(all_numeric_predictors())  
+
+#Structure Model
+knn_model <- nearest_neighbor(
+  neighbors = tune(),   # this is k
+  weight_func = "rectangular",
+  dist_power = 2
+) %>%
+  set_engine("kknn") %>%
+  set_mode("classification")
+
+#Build workflow
+knn_workflow <- workflow() %>%
+  add_recipe(knn_recipe) %>%
+  add_model(knn_model)
+
+#Cross validation of k-NN model
+#Check for best k-value and prints 20 k-values + accuracy
+knn_grid <- tibble(neighbors = 1:20)
+knn_tuned <- knn_workflow %>%
+  tune_grid(
+    resamples = normal_tree_folds,
+    grid = knn_grid,
+    metrics = tree_metrics
+  )
+
+knn_tuned %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  select(k = neighbors, accuracy = mean)
+
+# obtain mean roc_auc score
+knn_tuned %>%
+  show_best(metric = "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(mean))
+
+# .metric   mean
+# roc_auc   0.6937371	
+
+# Creates plot for k-values vs Accuracy
+knn_tuned %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  ggplot(aes(neighbors, mean)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "KNN Accuracy vs K", x = "k", y = "Accuracy")
+
+#Finalize k-NN
+best_knn <- knn_tuned %>%
+  select_best(metric = "accuracy")
+
+final_knn_workflow <- knn_workflow %>%
+  finalize_workflow(best_knn)
+
+best_knn
+
+#Test Performance
+final_knn_fit <- final_knn_workflow %>%
+  last_fit(split = normal_df_split, metrics = tree_metrics)
+
+final_knn_fit %>%
+  collect_metrics()
+
+# KNN Results
+# accuracy	multiclass	0.5968992
+# sens	    macro	      0.2596267
+# spec	    macro	      0.8908521		
+# roc_auc	  hand_till	  0.6443231
+
+```
+
+# Model 4 - KNN: Synthetic Data (df)
+
+```{r}
+#Create Recipe
+knn_recipe <- recipe(NObeyesdad ~ ., data = syn_obesity_train) %>%
+  step_novel(all_nominal_predictors(), new_level = "other") %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_predictors()) %>%
+  step_normalize(all_numeric_predictors())  
+
+#Structure Model
+knn_model <- nearest_neighbor(
+  neighbors = tune(),   # this is k
+  weight_func = "rectangular",
+  dist_power = 2
+) %>%
+  set_engine("kknn") %>%
+  set_mode("classification")
+
+#Build workflow
+knn_workflow <- workflow() %>%
+  add_recipe(knn_recipe) %>%
+  add_model(knn_model)
+
+#Cross validation of k-NN model
+#Check for best k-value and prints 20 k-values + accuracy
+knn_grid <- tibble(neighbors = 1:20)
+knn_tuned <- knn_workflow %>%
+  tune_grid(
+    resamples = syn_tree_folds,
+    grid = knn_grid,
+    metrics = tree_metrics
+  )
+
+knn_tuned %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  select(k = neighbors, accuracy = mean)
+
+# obtain mean roc_auc score
+knn_tuned %>%
+  show_best(metric = "roc_auc") %>%
+  group_by(.metric) %>%
+  summarize(mean = mean(mean))
+
+# .metric   mean
+# roc_auc	  0.9416791				
+
+# Creates plot for k-values vs Accuracy
+knn_tuned %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  ggplot(aes(neighbors, mean)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "KNN Accuracy vs K", x = "k", y = "Accuracy")
+
+#Finalize k-NN
+best_knn <- knn_tuned %>%
+  select_best(metric = "accuracy")
+
+final_knn_workflow <- knn_workflow %>%
+  finalize_workflow(best_knn)
+
+best_knn
+
+#Test Performance
+final_knn_fit <- final_knn_workflow %>%
+  last_fit(split = syn_df_split, metrics = tree_metrics)
+
+final_knn_fit %>%
+  collect_metrics()
+
+# KNN Results
+# accuracy	multiclass	0.8075472
+# sens	    macro	      0.8037989
+# spec	    macro	      0.9680202		
+# roc_auc	  hand_till	  0.8855494
 ```
