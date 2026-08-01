@@ -30,7 +30,7 @@ plan(multisession, workers = cores)
 
 # Load raw data 
 
-raw_data <- read.csv("original_obesity_dataset.csv", 
+raw_data <- read.csv("ObesityData.csv", 
                      stringsAsFactors = FALSE)
 
 cat("Number of rows:", nrow(raw_data),"\n",
