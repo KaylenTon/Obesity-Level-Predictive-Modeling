@@ -2,9 +2,7 @@
 title: "Obesity Level Predictive Modeling"
 author: "Zachary Cannon, Makayla Harvey, Giancarlo Pantano, Kaylen Ton, Megan Xiao"
 output:
-  word_document: default
-  html_document:
-    df_print: paged
+  output: github_document
 ---
 
 ### Load packages
